@@ -67,6 +67,10 @@ npm run start -- --config config/local.json
 npm run typecheck
 ```
 
+## SDK 文档
+
+- [Workflow lifecycle hooks](docs/lifecycle-hooks.md)
+
 ## 启动 Payload 结构
 
 ```json
