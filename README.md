@@ -9,8 +9,7 @@ https://accounts.hcaptcha.com/demo
 ```
 
 它会通过 Chrome DevTools Protocol endpoint 连接到浏览器，找到外层可见的
-hCaptcha iframe 区域，创建 workflow session，推送该区域的投射流，并接收
-platform 转发的鼠标输入。
+hCaptcha iframe 区域，创建 workflow session，推送该区域的投射流，并接收 platform 转发的鼠标输入。
 
 ## 内容
 

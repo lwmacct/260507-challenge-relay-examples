@@ -1,7 +1,19 @@
-# Workflow Lifecycle Hooks
+# Relay Lifecycle
 
 `@challenge-relay/projection` 默认不会把 workflow 生命周期写到 stdout。业务侧如果需要感知
-session、projection 或人工接力状态，应使用 lifecycle hooks。
+人工接力状态，应使用 relay lifecycle hooks。
+
+Relay lifecycle 只暴露业务语义，不暴露 SDK 内部 session / projection / socket 细节。
+
+## 状态机
+
+```text
+idle
+  -> relay.required
+  -> relay.assigned
+  -> relay.projecting
+  -> relay.completed | relay.cancelled | relay.failed
+```
 
 ## 基本用法
 
@@ -11,21 +23,25 @@ import { defineWorkflow } from "@challenge-relay/projection/workflow";
 const workflowApp = defineWorkflow({
   // defaults / inspectState / actions ...
 
-  hooks: {
-    onHumanRelayStarted(event) {
-      console.log("relay started", event.sessionId, event.activePart);
+  relay: {
+    onRequired(event) {
+      console.log("relay required", event.session.id, event.snapshot.region?.activePart?.part);
     },
 
-    onHumanRelayCompleted(event) {
-      console.log("relay completed", {
-        sessionId: event.sessionId,
-        reason: event.reason,
-        lastProjectionId: event.lastProjectionId,
-      });
+    onProjecting(event) {
+      console.log("relay projecting", event.projection.id, event.projection.part);
     },
 
-    onProjectionReplaced(event) {
-      console.log("projection replaced", event.projectionId, event.part);
+    onCompleted(event) {
+      console.log("relay completed", event.session.id, event.reason);
+    },
+
+    onCancelled(event) {
+      console.log("relay cancelled", event.reason);
+    },
+
+    onFailed(event) {
+      console.error("relay failed", event.scope, event.error);
     },
   },
 });
@@ -39,21 +55,50 @@ const workflowApp = defineWorkflow({
 
   lifecycle(event) {
     if (event.type === "relay.completed") {
-      console.log(event.sessionId, event.reason);
+      console.log(event.session.id, event.reason);
     }
   },
 });
 ```
 
-`hooks.lifecycle` 和顶层 `lifecycle` 二选一即可；如果同时提供，顶层 `lifecycle` 优先。
+`relay` 适合业务代码直接接具体阶段；`lifecycle(event)` 适合统一记录、统计或转发。
+
+## 什么时候进入人工接力
+
+监听 `relay.required`。
+
+SDK 在目标页检测到可见人工区域时触发该事件。内部判断条件是：
+
+- 找到目标页面。
+- 区域存在。
+- 有可见 `activeRegion`。
+- 有 `activePart.part`。
+- `verified !== true`。
+
+此时 SDK 已判断“适合进入人工接力”，但 operator 端未必已经接管。
+
+## 什么时候可以操作投影
+
+监听 `relay.projecting`。
+
+该事件表示第一条可用 projection 已经生成，payload 内会带：
+
+```ts
+event.projection.id
+event.projection.part
+event.projection.region
+event.projection.imageSize
+```
+
+operator UI 应以 `relay.projecting` 作为“画面已可操作”的信号。
 
 ## 人工接力完成
 
-人工接力完成事件是：
+监听 `relay.completed`：
 
 ```ts
-hooks: {
-  onHumanRelayCompleted(event) {
+relay: {
+  onCompleted(event) {
     // event.type === "relay.completed"
   }
 }
@@ -61,24 +106,33 @@ hooks: {
 
 触发条件：
 
-- 之前已经进入人工接力状态。
-- SDK 已经开始或收到过投影。
-- 后续检测到该 session 不再需要人工接力，或 session 被释放/关闭/撤销。
+- relay 之前已经进入 `required` / `assigned` / `projecting`。
+- 后续检测到该 session 不再需要人工接力，或 workflow action 明确完成。
 
 事件字段：
 
 ```ts
 type RelayCompletedEvent = {
   type: "relay.completed";
-  workflowId: string;
-  workflowKind: string;
-  workflowNodeId: string;
-  sessionId: string;
+  state: "completed";
+  workflow: {
+    id: string;
+    kind: string;
+    nodeId: string;
+  };
+  session: {
+    id: string;
+  };
   at: string;
-  reason: "verified" | "region_gone" | "session_released" | "workflow_completed" | "unknown";
+  reason: "verified" | "region_gone" | "task_released" | "session_closed" | "session_revoked" | "workflow_disconnected" | "workflow_completed" | "unknown";
   previousSnapshot: unknown | null;
   snapshot: unknown | null;
-  lastProjectionId: string | null;
+  projection: {
+    id: string;
+    part: string;
+    region: { x: number; y: number; width: number; height: number };
+    imageSize: { width: number; height: number };
+  } | null;
   activePartBefore: string | null;
 };
 ```
@@ -87,40 +141,32 @@ type RelayCompletedEvent = {
 
 - `verified`：最新页面状态显示外层区域已验证。
 - `region_gone`：外层可见人工区域消失。
-- `session_released`：platform 释放、关闭、撤销 session，或 workflow 断开。
 - `workflow_completed`：workflow action 明确要求完成 session。
 - `unknown`：SDK 能确认不再需要人工接力，但无法归类原因。
 
+外部释放、关闭、撤销或断开不属于 completed，会触发 `relay.cancelled`。
+
 ## 事件列表
 
-| 事件类型 | 快捷 hook | 说明 |
+| 事件类型 | Hook | 说明 |
 | --- | --- | --- |
-| `workflow.connected` | `onWorkflowConnected` | workflow socket 已连接 platform。 |
-| `workflow.registered` | `onWorkflowRegistered` | workflow node 已注册。 |
-| `workflow.disconnected` | `onWorkflowDisconnected` | workflow socket 断开。 |
-| `workflow.error` | `onWorkflowError` | SDK runtime 捕获到错误。 |
-| `session.created` | `onSessionCreated` | SDK 检测到人工区域并创建 session。 |
-| `session.assigned` | `onSessionAssigned` | platform 将 session 分配给该 workflow。 |
-| `session.snapshot` | `onSessionSnapshot` | session 页面状态快照同步。 |
-| `session.updated` | `onSessionUpdated` | session phase / requiresHuman 更新。 |
-| `session.released` | `onSessionReleased` | platform 释放 session task。 |
-| `session.closed` | `onSessionClosed` | session 被关闭。 |
-| `session.revoked` | `onSessionRevoked` | session 被撤销。 |
-| `relay.started` | `onHumanRelayStarted` | session 进入人工接力状态。 |
-| `relay.completed` | `onHumanRelayCompleted` | 人工接力结束。 |
-| `projection.started` | `onProjectionStarted` | SDK 开始推送投影流。 |
-| `projection.replaced` | `onProjectionReplaced` | 投影 keyframe / region 被替换。 |
-| `projection.stopped` | `onProjectionStopped` | 投影流停止。 |
-| `input.accepted` | `onInputAccepted` | 鼠标输入被 SDK 接收并进入派发队列。 |
-| `input.dropped` | `onInputDropped` | 鼠标输入被丢弃。 |
+| `relay.required` | `relay.onRequired` | 可见人工区域出现，SDK 判断需要接力。 |
+| `relay.assigned` | `relay.onAssigned` | platform 已分配接力任务，SDK 开始跟踪该 session。 |
+| `relay.projecting` | `relay.onProjecting` | 第一帧投影已可用，operator 可以操作。 |
+| `relay.input` | `relay.onInput` | 鼠标输入已被 SDK 接收并进入派发队列。 |
+| `relay.completed` | `relay.onCompleted` | 人工接力正常结束。 |
+| `relay.cancelled` | `relay.onCancelled` | 接力被外部取消或 workflow 断开。 |
+| `relay.failed` | `relay.onFailed` | SDK runtime 捕获到错误。 |
 
-## 输入丢弃原因
+## 取消原因
 
-`input.dropped` 的 `reason` 可能是：
+`relay.cancelled` 的 `reason` 可能是：
 
-- `not_assigned`：输入不属于当前分配的 session。
-- `human_not_required`：session 当前不需要人工接力。
-- `stale_projection`：输入来自旧 projectionId。
+- `task_released`：platform 释放 session task。
+- `session_closed`：session 被关闭。
+- `session_revoked`：session 被撤销。
+- `workflow_disconnected`：workflow socket 断开。
+- `unknown`：无法归类。
 
 ## Hook 错误处理
 
@@ -153,4 +199,4 @@ defineWorkflow({
 });
 ```
 
-业务状态请优先使用 lifecycle hooks，不要依赖 stdout 文本。
+业务状态请优先使用 relay lifecycle hooks，不要依赖 stdout 文本。
