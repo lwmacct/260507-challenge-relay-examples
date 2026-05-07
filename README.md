@@ -16,8 +16,8 @@ platform 转发的鼠标输入。
 
 - `src/` 包含示例 workflow 代码。
 - `config/example.json` 启动配置示例。
-- `vendor/projection-0.1.0.tgz` 是本示例使用的已编译 projection SDK 包。
-- `vendor/challenge-0.1.0.tgz` 是本示例使用的已编译 challenge adapter SDK 包。
+- `vendor/projection.tgz` 是本示例使用的已编译 projection SDK 包。
+- `vendor/challenge.tgz` 是本示例使用的已编译 challenge adapter SDK 包。
 
 SDK 包只暴露构建后的 `dist/` 文件和声明文件。本仓库不包含 SDK 源码。
 
