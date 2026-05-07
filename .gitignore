@@ -39,6 +39,8 @@ gen/
 .env.*
 !.env.example
 config/config.yaml
+config/local.json
+config/*.local.json
 
 # AI tools
 .claude

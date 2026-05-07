@@ -1,0 +1,28 @@
+{
+  "config": {
+    "workflow": {
+      "id": "wf_demo_01",
+      "kind": "demo"
+    },
+    "platform": {
+      "url": "http://127.0.0.1:3000"
+    },
+    "browser": {
+      "endpoint": "http://localhost:9222"
+    },
+    "target": {
+      "url": "https://accounts.hcaptcha.com/demo",
+      "pageMatch": "accounts.hcaptcha.com/demo"
+    },
+    "stream": {
+      "intervalMs": 66,
+      "jpegQuality": 70,
+      "tileSize": 10,
+      "keyframeIntervalMs": 2000
+    }
+  },
+  "data": {
+    "text": "demo test",
+    "submit": false
+  }
+}

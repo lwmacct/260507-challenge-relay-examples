@@ -1,0 +1,23 @@
+{
+  "name": "challenge-relay-examples",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Public projection SDK workflow demo",
+  "main": "src/main.ts",
+  "scripts": {
+    "start": "tsx src/main.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@challenge-relay/challenge": "file:vendor/challenge-0.1.0.tgz",
+    "@challenge-relay/projection": "file:vendor/projection-0.1.0.tgz"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
