@@ -1,6 +1,6 @@
 {
   "name": "challenge-relay-examples",
-  "version": "0.2.260507",
+  "version": "0.3.260507",
   "private": true,
   "description": "Public projection SDK workflow demo",
   "main": "src/main.ts",
